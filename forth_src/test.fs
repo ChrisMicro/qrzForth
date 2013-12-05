@@ -104,14 +104,21 @@ variable pad                \ text buffer
 : init rregs rpointer ! h# scrstart 1+ scrpos ! dec ;
 init
 : delay d# 3 0do h# fff fff * drop loop ;
-: multest ( n -- ) dup str type space s" square:" type dup * str type cr ;
+: multest ( n -- ) 3 spaces dup str type space s" square:" type dup * str type cr ;
 : hello s" if you see this, qrzVM is running calc square" type cr ;
-: test init hello d# 0 100 0do 1+ dup multest loop ;
+
+: millis ( time in milli seconds ) 4 external drop ;
+variable tstart
+: mess millis tstart ! multest s" duration: " type millis tstart @ - str type cr ;
+: doloop millis tstart ! d# 10000 0do loop s" 10000 do loop duration: " type millis tstart @ - str type cr ;
+: test init hello doloop d# 0 100 0do 1+ dup mess loop ;
 
 \ screen address access on PC makes screeen visible
 : show h# 6000 @ 6000 ! ;
+: tt 4 external . . ;
+
 
 main test    \ set main jmp instructionTest
 
-\ save	     \   save memory to disk
+save	     \   save memory to disk
 

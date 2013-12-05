@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 
 #define STSIZE 0x10000
 
@@ -62,7 +63,7 @@ Index_t CodePointer=CODESTARTADDRESS;
 	#define CPU_DEBUGOUTHEX(text,value)
 #endif
 
-#define GETCHAR getchar()
+#define SYSTEMGETCHAR() getchar()
 #define SYSTEMOUT(text) { puts(text);};
 #define SYSTEMOUT_(text) { printf(text);};
 #define SYSTEMOUTCR {puts("");};
@@ -487,7 +488,7 @@ static FILE *InputFile;
 char getCharFromStream()
 {
 	char c;
-	if(InputStreamState==GETKEY)c=GETCHAR;
+	if(InputStreamState==GETKEY)c=SYSTEMGETCHAR();
 	if(InputStreamState==READFROMFILE)
 	{
 		c=fgetc(InputFile);
@@ -594,48 +595,7 @@ void getWordFromStreamWithOutComments()
 		}
 	}
 }
-/**************************************************************************
 
-	void cpuExternalCall(uint16_t command, uint16_t value)
-
-	The simulator may call external functions outside of FORTH
-	This functions are implemented in this C-Code.
-
-	parameters
-		command: first value from datasp
-		value: second value from datasp
-
-*************************************************************************/
-#define EXTERNAL_C_PRINTCHAR 	0
-#define EXTERNAL_C_PRINTNUMBER 	1
-#define EXTERNAL_C_SETBASE 		2
-
-void cpuExternalCall(int32_t value, uint16_t command)
-{
-	//SYSTEMOUTHEX("command",command);
-	//SYSTEMOUTHEX("value",value);
-	switch(command)
-	{
-		case EXTERNAL_C_PRINTCHAR:
-		{
-			SYSTEMOUTCHAR(value);
-		}break;
-		case EXTERNAL_C_PRINTNUMBER:
-		{
-			if(Base==10)
-			{
-				value=(value>0x8000L)? value-(int32_t) 0x10000L:value;
-				SYSTEMOUTPRINTNUMBER(value);
-			}
-			else SYSTEMOUTPRINTHEXNUMBER(value);
-		}break;
-		case EXTERNAL_C_SETBASE: // set the calculation base
-		{
-			Base=value;
-		}break;
-		default: SYSTEMOUT("external command not found");
-	}
-}
 /******************************************************************************************
  *
  * qrz virtual machine
@@ -783,6 +743,18 @@ void disassmbleWord(Index_t code)
 		}
 	}
 }
+
+ uint32_t updateSysCounter() {
+    static clock_t start;
+    if(start){
+    	// printf("difftime %d  ",difftime(clock(),start));
+        return difftime(clock(),start) ;
+    } else {
+        start=clock();
+        return 0;
+    }
+ }
+
 /**************************************************************************
 
 	CPU simulator ( or virtual machine )
@@ -906,6 +878,67 @@ uint16_t popReturnStack(Cpu_t *cpu)
 		simulatorReset(cpu);
 	}
 	return value;
+}
+/**************************************************************************
+
+	void cpuExternalCall(uint16_t command, uint16_t value)
+
+	The simulator may call external functions outside of FORTH
+	This functions are implemented in this C-Code.
+
+	parameters
+		command: first value from datasp
+		value: second value from datasp
+
+*************************************************************************/
+#define EXTERNAL_C_PRINTCHAR 	0
+#define EXTERNAL_C_PRINTNUMBER 	1
+#define EXTERNAL_C_SETBASE 		2
+#define EXTERNAL_C_GETKEY		3
+#define EXTERNAL_C_GETMSTIME	4
+
+void cpuExternalCall(Cpu_t *cpu)
+{
+	//SYSTEMOUTHEX("command",command);
+	//SYSTEMOUTHEX("value",value);
+	int32_t command=pop(cpu);
+	uint16_t value;
+	switch(command)
+	{
+		case EXTERNAL_C_GETMSTIME:
+		{
+			push(cpu,updateSysCounter()&0xFFFF); // low counts
+			push(cpu,updateSysCounter()>>16); // high counts
+		}break;
+
+		case EXTERNAL_C_GETKEY:
+		{
+			push(cpu,SYSTEMGETCHAR());
+			push(cpu,0xFFFF); // true flag for char received
+		}break;
+
+		case EXTERNAL_C_PRINTCHAR:
+		{
+			value=pop(cpu);
+			SYSTEMOUTCHAR(value);
+		}break;
+		case EXTERNAL_C_PRINTNUMBER:
+		{
+			value=pop(cpu);
+			if(Base==10)
+			{
+				value=(value>0x8000L)? value-(int32_t) 0x10000L:value;
+				SYSTEMOUTPRINTNUMBER(value);
+			}
+			else SYSTEMOUTPRINTHEXNUMBER(value);
+		}break;
+		case EXTERNAL_C_SETBASE: // set the calculation base
+		{
+			value=pop(cpu);
+			Base=value;
+		}break;
+		default: SYSTEMOUT("external command not found");
+	}
 }
 // main routine vor the cpu ( or vm )
 void executeVm(Cpu_t *cpu, Command_t command)
@@ -1134,7 +1167,7 @@ void executeVm(Cpu_t *cpu, Command_t command)
 
 			// this funktion needs 2 data stack elements
 			case EXTERNAL_C:{ CPU_DEBUGOUT("external c");
-				cpuExternalCall(pop(cpu),pop(cpu));
+				cpuExternalCall(cpu);
 			}break;
 			default: SYSTEMOUT("cpu cmd error");
 		}
@@ -1435,7 +1468,7 @@ void save_qrzCode_Avr()
     uint32_t k;
 
 	FILE *f;
-    f=fopen("qrzForthCode.h","w");
+    f=fopen("qrzCode.h","w");
     if(f==NULL)
     {
     	SYSTEMOUT("could not open forth.bin for to write");
