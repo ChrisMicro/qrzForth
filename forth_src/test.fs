@@ -2,6 +2,7 @@
 	this is just a test
 }
 
+: i r> r> dup -rot >r >r ; \ i: loop index inside for or 0do
 : cr ( -- ) h# 0d emit 0a emit ;
 : space  ( -- )		d# 32 emit ; \ write space to console
 
@@ -47,9 +48,9 @@
 ;
 \ end 
 \ from http://www.excamera.com/sphinx/fpga-j1.html
-
+\ COUNT converts a string array address to the address-length representation of a counted string.
 \ get string length by searching 0 terminated string
-: strlen ( adr -- adr len )
+: count ( adr -- adr len )
     dup
     -1              \ ( adr adr -1 ) init len=-1   
     begin
@@ -64,6 +65,7 @@
     until           \ ( adr adr+1 len+1 )
     nip             \ ( adr len )
 ;
+: key 3 external drop ;
 
 variable base
 
@@ -85,7 +87,7 @@ variable pad                \ text buffer
 \ convert digit relating to base
 : extract ( n base -- n c ) 0 swap um/mod swap digit ;
 : <# ( -- ) pad 2* hld ! ;
-\ store digit in pad
+\ store digit in pad from top address pad downwards
 : hold ( c -- ) hld @ 1- dup hld ! c! ;
 \ convert one digit and store in pad
 : # ( u -- u ) base @ extract hold ;
@@ -99,6 +101,61 @@ variable pad                \ text buffer
 : str ( n -- b u ) dup >R abs <# #s R> sign #> ;
 : hex ( -- ) d# 16 base ! ;
 : dec ( -- ) d# 10 base ! ;
+
+\ converts a digit to its numeric value according to the current base
+: digit? ( c base -- u flag )
+    >R 48 - 9 over <
+    if 7 - dup 10 < or then dup R> u< ;
+{
+: NUMBER? ( a -- n T | a F )
+
+  BASE @ >R  0 OVER COUNT ( a 0 b n)
+
+  OVER C@ 36 =
+
+  IF HEX SWAP 1 + SWAP 1 - THEN ( a 0 b' n')
+
+  OVER C@ 45 = >R ( a 0 b n)
+
+  SWAP R@ - SWAP R@ + ( a 0 b" n") ?DUP
+
+  IF 1 - ( a 0 b n)
+
+    FOR DUP >R C@ BASE @ DIGIT?
+
+      WHILE SWAP BASE @ * +  R> 1 +
+
+    NEXT DROP R@ ( b ?sign) IF NEGATE THEN SWAP
+
+      ELSE R> R> ( b index) 2DROP ( digit number) 2DROP 0
+
+      THEN DUP
+
+  THEN R> ( n ?sign) 2DROP R> BASE ! ;
+
+: number? ( a -- n T | a F )
+    base @ >R 0 over count ( a 0 b n)
+    over c@ 36 = 
+
+    if hex swqp 1 + swap 1 - then   \ ( a 0 b' n')
+    over c@ 45 = >R                 \ ( a 0 b n)
+    swap R@ - swap R@ +             \ ( a 0 b" n") 
+    ?dup
+    if 1-                           \ ( a 0 b n)
+
+    FOR DUP >R C@ BASE @ DIGIT?
+
+      WHILE SWAP BASE @ * +  R> 1 +
+
+    NEXT DROP R@ ( b ?sign) IF NEGATE THEN SWAP
+
+      ELSE R> R> ( b index) 2DROP ( digit number) 2DROP 0
+
+      THEN DUP
+
+  THEN R> ( n ?sign) 2DROP R> BASE ! ;
+}
+1 drop
 \ ************************************************************
 
 : init rregs rpointer ! h# scrstart 1+ scrpos ! dec ;
@@ -115,10 +172,23 @@ variable tstart
 
 \ screen address access on PC makes screeen visible
 : show h# 6000 @ 6000 ! ;
+\ time
 : tt 4 external . . ;
 
+\ pseudo random 
+variable RND                           ( seed )
+: random ( -- n, a random number within 0 to 65536 )
+        RND @ 31421 *                   ( RND*31421 )
+        6927 +                          ( RND*31421+6926, mod 65536)
+        dup RND !                       ( refresh he seed )
+        ;
 
 main test    \ set main jmp instructionTest
 
-save	     \   save memory to disk
+\ save	     \   save memory to disk
 
+: kk 10 5 begin 1+ dup . over over = until ;
+\ : DO   HERE@ >R >R  ; IMMEDIATE
+\ : LOOP  R> R> 1+ 2DUP = 0BRANCH 2DROP ; IMMEDIATE
+\ : WHILE   ' 0BRANCH , HERE@ 0 , ; IMMEDIATE
+\ : REPEAT   ' BRANCH , HERE@ 1+ SWAP ! , ; IMMEDIATE

@@ -25,19 +25,26 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <time.h>
 
+#include "qrzVm.h"
+#include "systemout.h"
+
+uint8_t Base=10; // startup forth with decimal base
+
+extern uint8_t Memory_u8[];
+extern uint8_t Memory_bigEndian_u8[]; // big endian memory for other processors than PC
+/*
 #define STSIZE 0x10000
 
 uint8_t Memory_u8[STSIZE];
 uint8_t Memory_bigEndian_u8[STSIZE]; // big endian memory for other processors than PC
-
+*/
 // reserve at least 2 bytes for the jmp to main at address 0
 // this it the reset location of the VM
 
-#define CODESTARTADDRESS 		0x0002
-#define RAMHEAPSTART 			0x1800 // location, where FORTH variables are stored, at this address the VM must provide RAM
-#define DICTIONARYSTARTADDRESS 	0x2000
+//#define CODESTARTADDRESS 		0x0002
+//#define RAMHEAPSTART 			0x1800 // location, where FORTH variables are stored, at this address the VM must provide RAM
+//#define DICTIONARYSTARTADDRESS 	0x2000
 // separate code from directory
 // this is used to save memory for code only programs
 // in small microcontrollers where you don't need the
@@ -51,7 +58,7 @@ Index_t CodePointer=CODESTARTADDRESS;
 
 #define true (1==1)
 #define false (!true)
-
+/*
 //#define DEBUGCPU
 #ifdef DEBUGCPU
 	#define CPU_DEBUGOUT(text) { puts(text);};
@@ -73,7 +80,7 @@ Index_t CodePointer=CODESTARTADDRESS;
 #define SYSTEMOUTCHAR(value) { putchar(value);};
 #define SYSTEMOUTPRINTNUMBER(value) { printf(" %d ",value);};
 #define SYSTEMOUTPRINTHEXNUMBER(value) { printf(" %4x ",value);};
-
+*/
 /***************************************************************************
   FORTH Dictionary Definition
 
@@ -135,6 +142,7 @@ Index_t CodePointer=CODESTARTADDRESS;
 typedef struct{
 	Index_t indexOfNextEntry;
 	Index_t code;
+	uint16_t flags;
 	char firstCharOfName;
 }DirEntry_t;
 /****************************************************************************
@@ -202,7 +210,7 @@ void addDirEntry(char * string,Index_t code)
 	// set current index to next entry
 	CurrentIndex+=strlen(s1)+sizeof(DirEntry_t);
 
-	// allignment to 16 bit because the char position can be odd
+	// alignment to 16 bit because the char position can be odd
 	if((CurrentIndex & 1)==1)CurrentIndex++;
 
 	de->indexOfNextEntry=CurrentIndex;
@@ -233,7 +241,7 @@ Index_t setEntryName(char * string)
 
 	#ifndef CODE_SEPARATED_FROM_DICTIONARY
 		nextCodeIndex=CurrentIndex+strlen(s1)+sizeof(DirEntry_t)-1;// set current index to next entry
-		if((nextCodeIndex & 1)==1)nextCodeIndex++; // allignment to 16 bit
+		if((nextCodeIndex & 1)==1)nextCodeIndex++; // alignment to 16 bit
 		de->code=nextCodeIndex;
 	#else
 		de->code=CodePointer;
@@ -334,6 +342,7 @@ Index_t showDirEntry(Index_t index)
 	}
 	return de->indexOfNextEntry;
 }
+
 void showDictionary()
 {
 	CurrentIndex=DICTIONARYSTARTADDRESS;
@@ -426,8 +435,8 @@ Index_t searchWord(char * string)
  	  false: not
 
 *************************************************************************/
-uint8_t Base=10; // startup forth with decimal base
-// tbd: only basw 10 or 16 allowed at the moment
+
+// tbd: only base 10 or 16 allowed at the moment
 uint8_t isDigitOfBase(char chr)
 {
 	uint8_t flag=false;
@@ -494,7 +503,7 @@ char getCharFromStream()
 		c=fgetc(InputFile);
 		if(c==EOF)
 		{
-			close(InputFile);
+			fclose(InputFile);
 			InputStreamState=GETKEY; // switch to keyboard
 			c=' ';
 		}
@@ -595,111 +604,6 @@ void getWordFromStreamWithOutComments()
 		}
 	}
 }
-
-/******************************************************************************************
- *
- * qrz virtual machine
- *
- * This is a virtual machine for small microcontrollers.
- * The virtual machine can interpret the qrz-Code
- *
- * Where it comes from:
- * The instruction format was developed in collaboration with ALE who wants implement
- * a cpu on a FPGA. I proposed Forth as a higher level language than assembler
- * because a Forth-compiler is much easier to develop than a C-compiler.
- * So he makes the FPGA cpu and I make the Forth-compiler.
- * We wanted to name our code "qwertz" ( from the german keyboard ), because we had no
- * other idea.
- * But that was to long, so we reduced it to "qrz".
- * The qrz-Code is used from qrzForth.
- *
- * p.s.: the code format is still under construction and may be changing in the
- *       next versions
- *
- *****************************************************************************************/
-/*
-* qrz Instructions
- *
- * 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
- *  0 <---------- 15 bit constant push ---------->
- *  1  0  0  x  x  x  x  x  x  x  0  0  0  0  0  0   8000  CMPZ  A = A == 0
- *  1  0  0  x  x  x  x  x  x  x  0  0  0  0  0  1   8001  1+    A = A + 1
- *  1  0  0  x  x  x  x  x  x  x  0  0  0  0  1  0   8002  2+    A = A + 2
- *  1  0  0  x  x  x  x  x  x  x  0  0  0  0  1  1   8003  CMPNZ A = A != 0
- *  1  0  0  x  x  x  x  x  x  x  0  0  0  1  0  0   8004  1-    A = A - 1
- *  1  0  0  x  x  x  x  x  x  x  0  0  0  1  0  1   8005  2-    A = A - 2
- *  1  0  0  x  x  x  x  x  x  x  0  0  1  0  0  0   8008  NOT   A = A - 2
- *  1  0  0  x  x  x  x  x  x  x  0  0  1  0  0  1   8009  ROL   A = {c} A>> 1
- *  1  0  0  x  x  x  x  x  x  x  0  0  1  0  1  0   800A  ROR   A = A <<1{c}
- *  1  0  0  x  x  x  x  x  x  x  0  0  1  0  1  1   800B  SHL   A = A << 1
- *  1  0  0  x  x  x  x  x  x  x  0  0  1  0  1  1   800C  ASR   A = A >> 1
- *  1  0  0  x  x  x  x  x  x  x  0  1  0  0  0  0   8010  ADD A = A + B
- *  1  0  0  x  x  x  x  x  x  x  0  1  0  0  0  1   8011  SUB A = A - B
- *  1  0  0  x  x  x  x  x  x  x  0  1  0  0  1  0   8012  AND A = A & B
- *  1  0  0  x  x  x  x  x  x  x  0  1  0  0  1  1   8013  OR  A = A | B
- *  1  0  0  x  x  x  x  x  x  x  0  1  0  1  0  0   8014  XOR A = A ^ B
- *  1  0  0  x  x  x  x  x  x  x  0  1  0  1  0  1   8015  =
- *  1  0  0  x  x  x  x  x  x  x  0  1  0  1  1  0   8016  !=
- *  1  0  0  x  x  x  x  x  x  x  0  1  0  1  1  1   8017  >
- *  1  0  0  x  x  x  x  x  x  x  1  0  0  0  0  0   8020  >r
- *  1  0  0  x  x  x  x  x  x  x  1  0  0  0  0  1   8021  r>
- *  1  0  0  x  x  x  x  x  x  x  1  0  0  0  1  0   8022  dup
- *  1  0  0  x  x  x  x  x  x  x  1  0  0  0  1  1   8023  drop
- *  1  0  0  x  x  x  x  x  x  x  1  1  0  0  0  0   8030  mem write
- *  1  0  0  x  x  x  x  x  x  x  1  1  0  0  0  1   8031  mem write and inc addr
- *  1  0  0  x  x  x  x  x  x  x  1  1  0  0  1  0   8032  mem read
- *  1  0  0  x  x  x  x  x  x  x  1  1  0  0  1  1   8033  mem read and inc addr
- *  1  0  0  x  x  x  x  x  x  x  1  1  1  1  0  1   803D  pop address
- *  1  0  0  x  x  x  x  x  x  x  1  1  1  1  1  0   803E  rts
- *  1  0  1  a  a  a  a  a  a  a  a  a  a  a  a  a   A/B000 jmpz
- *  1  1  0  a  a  a  a  a  a  a  a  a  a  a  a  a   C/D000 call
- *  1  1  1  a  a  a  a  a  a  a  a  a  a  a  a  a   E/F000 JMP
- */
-
-// Instructions
-#define CONST 		0x0000	// if the highest bit is not set, a constant is pushed on stack
-#define CMPZA	  	0x00 	// 8000  CMPZ  A = A == 0
-#define PLUS1   	0x01 	// 8001  1+    A = A + 1
-#define PLUS2   	0x02 	// 8002  2+    A = A + 2
-#define CMPNZA	 	0x03 	// 8003  CMPNZ A = A != 0
-#define MINUS1  	0x04 	// 8004  1-    A = A - 1
-#define MINUS2  	0x05 	// 8005  2-    A = A - 2
-#define _NOT    	0x08 	// 8008  NOT   A =~ A
-//#define _ROL    	0x09 	// 8009  ROL   A = {c} A>> 1
-//#define _ROR    	0x0A 	// 800A  ROR   A = A <<1{c}
-#define _SHL    	0x0B 	// 800B  SHL   A = A << 1
-#define _ASR    	0x0C 	// 800C  ASR   A = A >> 1
-#define APLUSB  	0x10 	// 8010  ADD A = A + B
-#define AMINUSB 	0x11 	// 8011  SUB A = A - B
-#define AANDB   	0x12 	// 8012  AND A = A & B
-#define AORB    	0x13 	// 8013  OR  A = A | B
-#define AXORB   	0x14 	// 8014  XOR A = A ^ B
-#define AEQUALB 	0x15 	// 8015  =
-#define ANOTEQUALB 	0x16 	// 8016  !=
-#define AGREATERB  	0x17  	// 8017  >
-#define DSP2RSP 	0x20 	// 8020  >r
-#define RSP2DSP 	0x21 	// 8021  r>
-#define DUP 		0x22 	// 8022  dup
-#define DROP 		0x23	// 8023  drop
-#define SWAP 		0x24	// 8024  swap
-//8025 over
-#define ROT			0x26 	// 8026 roll ( rot in Forth )
-#define MEMWRITE 	0x30	// 8030  mem write
-//#define MEMWRITEINC 0x31 	// 8031  mem write and inc addr
-#define MEMREAD 	0x32 	// 8032  mem read
-//#define MEMREADINC 	0x33 	// 8033  mem read and inc addr
-#define POPADR 		0x3D 	// 803D  pop address ( pop to addr register A )
-#define RTS 		0x3E 	// 803E   rts
-
-#define JMPZ 		0xA000 		// A/B000 jmpz
-#define CALL 		0xC000 		// C/D000 call
-#define JMP 		0xE000 		// E/F000 JMP
-
-#define EXTERNAL_C	0x80	// call c function outside simulator
-
-
-#define COMMANDGROUP2 		0x8000
-#define COMMANDGROUP2MASK 	0xE000
 /**************************************************************************
 
 	void disassmbleWord(Index_t code)
@@ -744,16 +648,6 @@ void disassmbleWord(Index_t code)
 	}
 }
 
- uint32_t updateSysCounter() {
-    static clock_t start;
-    if(start){
-    	// printf("difftime %d  ",difftime(clock(),start));
-        return difftime(clock(),start) ;
-    } else {
-        start=clock();
-        return 0;
-    }
- }
 
 /**************************************************************************
 
@@ -762,419 +656,7 @@ void disassmbleWord(Index_t code)
 *************************************************************************/
 typedef Index_t Command_t;
 
-#define DATASTACKSIZE 16
-#define RETURNSTACKSIZE 32
-#define RETSP_INITVAL 0 // return stack origin
 
-typedef struct {
-	uint16_t datasp; // data stack pointer
-	uint16_t retsp;  // return	stack pointer
-	uint16_t dataStack[DATASTACKSIZE];
-	uint16_t returnStack[RETURNSTACKSIZE];
-	uint16_t regpc;  // programm counter
-	uint16_t regadr; // adress register, used to hold address for memread/memwrite
-	uint16_t *memory;
-}Cpu_t;
-
-// tbd: move display memory outside the cpu
-#define COLUMNS 		100
-#define ROWS			10
-#define SCREENADDRESS 	0x6000
-
-void showScreen(Cpu_t *cpu)
-{
-	uint16_t col,row;
-	uint16_t adr=SCREENADDRESS;
-	for(row=0;row<ROWS;row++)
-	{
-		for(col=0;col<COLUMNS;col++)
-		{
-			char c= cpu->memory[adr++];
-			if(c>' ') { SYSTEMOUTCHAR(c); }
-			else { SYSTEMOUTCHAR(' '); }
-		}
-		SYSTEMOUTCR;
-	}
-}
-
-void simulatorReset(Cpu_t *cpu)
-{
-	cpu->datasp=0;
-	cpu->retsp=RETSP_INITVAL;
-	cpu->regpc=0;
-	cpu->regadr=0;
-	cpu->memory=( uint16_t* )Memory_u8;
-}
-
-void showCpu(Cpu_t *cpu)
-{
-	SYSTEMOUTHEX("regpc: ",cpu->regpc);
-	SYSTEMOUTHEX("datasp: ",cpu->datasp);
-	SYSTEMOUTHEX("retsp: ",cpu->retsp);
-	SYSTEMOUTHEX("regadr: ",cpu->regadr);
-	SYSTEMOUT("");
-}
-
-void showMemory(Cpu_t *cpu,uint16_t count)
-{
-	uint16_t n;
-	for(n=0;n<count; n++) CPU_DEBUGOUTHEX(" ",cpu->stacks[n]);
-}
-
-void writeMemory(Cpu_t *cpu,uint16_t wordAddress, uint16_t value)
-{
-	cpu->memory[wordAddress]=value;
-	if(wordAddress==SCREENADDRESS) showScreen(cpu);
-}
-
-uint16_t readMemory(Cpu_t *cpu, uint16_t wordAddress)
-{
-	return cpu->memory[wordAddress];
-}
-
-void push(Cpu_t *cpu,uint16_t value)
-{
-	if((cpu->datasp)<DATASTACKSIZE) cpu->dataStack[cpu->datasp++]=value; // push constant
-	else
-	{
-		SYSTEMOUT("data stack overflow");
-		SYSTEMOUT("reset vm");
-		simulatorReset(cpu);
-	}
-}
-
-void push2ReturnStack(Cpu_t *cpu,uint16_t value)
-{
-	if((cpu->retsp)<(RETURNSTACKSIZE)) cpu->returnStack[cpu->retsp++]=value; // push constant
-	else
-	{
-		SYSTEMOUT("return stack overflow");
-		SYSTEMOUT("reset vm");
-		simulatorReset(cpu);
-	}
-}
-
-uint16_t pop(Cpu_t *cpu)
-{
-	uint16_t value=0;
-	if((cpu->datasp)>0) value=cpu->dataStack[--(cpu->datasp)];
-	else
-	{
-		SYSTEMOUT("data stack empty");
-		SYSTEMOUT("reset vm");
-		simulatorReset(cpu);
-	}
-	return value;
-}
-
-uint16_t popReturnStack(Cpu_t *cpu)
-{
-	uint16_t value=0;
-	if((cpu->retsp)>0) value=cpu->returnStack[--(cpu->retsp)];
-	else
-	{
-		SYSTEMOUT("return stack empty");
-		SYSTEMOUT("reset vm");
-		simulatorReset(cpu);
-	}
-	return value;
-}
-/**************************************************************************
-
-	void cpuExternalCall(uint16_t command, uint16_t value)
-
-	The simulator may call external functions outside of FORTH
-	This functions are implemented in this C-Code.
-
-	parameters
-		command: first value from datasp
-		value: second value from datasp
-
-*************************************************************************/
-#define EXTERNAL_C_PRINTCHAR 	0
-#define EXTERNAL_C_PRINTNUMBER 	1
-#define EXTERNAL_C_SETBASE 		2
-#define EXTERNAL_C_GETKEY		3
-#define EXTERNAL_C_GETMSTIME	4
-
-void cpuExternalCall(Cpu_t *cpu)
-{
-	//SYSTEMOUTHEX("command",command);
-	//SYSTEMOUTHEX("value",value);
-	int32_t command=pop(cpu);
-	uint16_t value;
-	switch(command)
-	{
-		case EXTERNAL_C_GETMSTIME:
-		{
-			push(cpu,updateSysCounter()&0xFFFF); // low counts
-			push(cpu,updateSysCounter()>>16); // high counts
-		}break;
-
-		case EXTERNAL_C_GETKEY:
-		{
-			push(cpu,SYSTEMGETCHAR());
-			push(cpu,0xFFFF); // true flag for char received
-		}break;
-
-		case EXTERNAL_C_PRINTCHAR:
-		{
-			value=pop(cpu);
-			SYSTEMOUTCHAR(value);
-		}break;
-		case EXTERNAL_C_PRINTNUMBER:
-		{
-			value=pop(cpu);
-			if(Base==10)
-			{
-				value=(value>0x8000L)? value-(int32_t) 0x10000L:value;
-				SYSTEMOUTPRINTNUMBER(value);
-			}
-			else SYSTEMOUTPRINTHEXNUMBER(value);
-		}break;
-		case EXTERNAL_C_SETBASE: // set the calculation base
-		{
-			value=pop(cpu);
-			Base=value;
-		}break;
-		default: SYSTEMOUT("external command not found");
-	}
-}
-// main routine vor the cpu ( or vm )
-void executeVm(Cpu_t *cpu, Command_t command)
-{
-#ifdef DEBUGCPU
-	showCpu(cpu);
-#endif
-	CPU_DEBUGOUTHEX(" code",command);
-#ifdef DEBUGCPU
-	CPU_DEBUGOUT_(" forth:");
-	disassmbleWord(command);
-	CPU_DEBUGOUT_(" #define:");
-#endif
-
-	if((command & 0x8000)==0)
-	{
-		CPU_DEBUGOUT("push number");
-		push(cpu,command&0x7FFF);
-		cpu->regpc+=2; // regpc addresses bytes
-	}
-	else if ((command&COMMANDGROUP2MASK)==CALL)
-	{
-		CPU_DEBUGOUT("call");
-		cpu->regpc+=2; // regpc addresses bytes
-		push2ReturnStack(cpu,cpu->regpc);
-		cpu->regpc=command&~COMMANDGROUP2MASK; // use lower bits as destination address
-	}
-	else if ((command&COMMANDGROUP2MASK)==JMP)
-	{
-		CPU_DEBUGOUT("jmp");
-		CPU_DEBUGOUTHEX("com",command);
-		cpu->regpc=command&~COMMANDGROUP2MASK; // use lower bits as destination address
-	}
-	else if ((command&COMMANDGROUP2MASK)==JMPZ)
-	{
-		CPU_DEBUGOUT("JMPZ");
-		if(pop(cpu)==0)
-		{
-			cpu->regpc=command&~COMMANDGROUP2MASK; // use lower bits as destination address
-		}else cpu->regpc+=2;
-	}
-	else if((command & COMMANDGROUP2MASK )== COMMANDGROUP2 )
-	{
-		uint8_t cmd=command&~COMMANDGROUP2MASK;
-
-		switch(cmd){
-
-			case RTS:{
-				CPU_DEBUGOUT("rts");
-				cpu->regpc=popReturnStack(cpu);
-				cpu->regpc-=2;
-			}break;
-
-			// 8000  CMPZ  A = A == 0
-			case CMPZA:{
-				CPU_DEBUGOUT("CMPZA");
-				uint16_t val=(pop(cpu)==0)? 0xFFFF : 0;
-				push(cpu,val);
-			}break;
-
-			// 8001  1+    A = A + 1
-			case PLUS1:{
-				CPU_DEBUGOUT("PLUS1");
-				push(cpu,pop(cpu)+1);
-			}break;
-
-			// 8002  2+    A = A + 2
-			case PLUS2:{
-				CPU_DEBUGOUT("PLUS2");
-				push(cpu,pop(cpu)+2);
-			}break;
-
-			// 8003  CMPNZ A = A != 0
-			case CMPNZA:{
-				CPU_DEBUGOUT("CMPNZA");
-				uint16_t val=(pop(cpu)!=0)? 0xFFFF : 0;
-				push(cpu,val);
-			}break;
-
-			// 8004  1-    A = A - 1
-			case MINUS1:{
-				CPU_DEBUGOUT("MINUS1");
-				push(cpu,pop(cpu)-1);
-			}break;
-
-			// 8005  2-    A = A - 2
-			case MINUS2:{
-				CPU_DEBUGOUT("MINUS2");
-				push(cpu,pop(cpu)-2);
-			}break;
-
-			// 8008  NOT   A =~ A
-			case _NOT:{
-				CPU_DEBUGOUT("_NOT");
-				push(cpu,~pop(cpu));
-			}break;
-			// tbd
-			//#define _ROL    	0x09 	// 8009  ROL   A = {c} A>> 1
-			//#define _ROR    	0x0A 	// 800A  ROR   A = A <<1{c}
-			case _SHL:{
-				CPU_DEBUGOUT("_SHL");
-				push(cpu,pop(cpu)<<1);
-			}break;
-
-			case _ASR:{	CPU_DEBUGOUT("_ASR");
-				push(cpu,pop(cpu)>>1);
-			}break;
-
-			// 8010  ADD A = A + B
-			case APLUSB:{
-				CPU_DEBUGOUT("APLUSB");
-				push(cpu,pop(cpu)+pop(cpu));
-			}break;
-
-			// 8011  SUB A = A - B
-			case AMINUSB:{
-				CPU_DEBUGOUT("AMINUSB");
-				// attention: this function may be implemented inverted in FPGA
-				int16_t b=pop(cpu);
-				int16_t a=pop(cpu);
-				push(cpu,b-a);
-			}break;
-
-			// 8012  AND A = A & B
-			case AANDB:{
-				CPU_DEBUGOUT("AANDB");
-				push(cpu,pop(cpu)&pop(cpu));
-			}break;
-
-			// 8013  OR  A = A | B
-			case AORB:{
-				CPU_DEBUGOUT("AORB"); push(cpu,pop(cpu)|pop(cpu));
-			}break;
-
-			// 8014  XOR A = A ^ B
-			case AXORB:{
-				CPU_DEBUGOUT("AXORB"); push(cpu,pop(cpu)^pop(cpu));
-			}break;
-
-			// 8015  =
-			case AEQUALB:{
-				CPU_DEBUGOUT("AEQUALB");
-				uint16_t val=(pop(cpu)==pop(cpu))? 0xFFFF:0 ;
-				push(cpu,val);
-			}break;
-
-			// 8016  !=
-			case ANOTEQUALB:{
-				CPU_DEBUGOUT("ANOTEQUALB");
-				uint16_t val=(pop(cpu)!=pop(cpu))? 0xFFFF:0 ;
-				push(cpu,val);
-			}break;
-
-			// 8017  > ( signed b > signed a )
-			case AGREATERB:{
-				CPU_DEBUGOUT("AGREATERB");
-				uint16_t val=((int16_t)pop(cpu)<(int16_t)pop(cpu))? 0xFFFF:0 ;
-				push(cpu,val);
-			}break;
-
-			// 8020  >r , push value to return stack
-			case DSP2RSP:{CPU_DEBUGOUT("dsp2rsp");
-				push2ReturnStack(cpu,pop(cpu));
-			}break;
-
-			// 8021 r> , pop value from return stack an push on data stack
-			case RSP2DSP:{ CPU_DEBUGOUT("rsp2dsp");
-				push(cpu,popReturnStack(cpu));
-			}break;
-
-			// 8022  dup
-			case DUP:{ CPU_DEBUGOUT("DUP");
-				uint16_t val=pop(cpu);
-				push(cpu,val);push(cpu,val);
-			}break;
-
-			// 8023  drop
-			case DROP:{ CPU_DEBUGOUT("DROP");
-				pop(cpu);
-			}break;
-			// 8024  swap
-			case SWAP:{ CPU_DEBUGOUT("SWAP");
-				uint16_t x1=pop(cpu);
-				uint16_t x2=pop(cpu);
-				push(cpu,x1);
-				push(cpu,x2);
-			}break;
-			// 8026  rot ( a b c -- b c a )
-			case ROT:{ CPU_DEBUGOUT("ROT");
-				uint16_t x1=pop(cpu);
-				uint16_t x2=pop(cpu);
-				uint16_t x3=pop(cpu);
-				push(cpu,x2);
-				push(cpu,x1);
-				push(cpu,x3);
-			}break;
-			// 8030  mem write
-			// pop value from stack and write to memory location [regadr]
-			case MEMWRITE:{ CPU_DEBUGOUT("memwr");
-				writeMemory(cpu,cpu->regadr,pop(cpu));
-			}break;
-
-			// 8031  mem write and inc addr
-			/*
-			case MEMWRITEINC:{CPU_DEBUGOUT("MEMWRITEINC");
-				cpu->memory[(cpu->regadr)++]=pop(cpu);
-			}break;
-			*/
-			// 8032  mem read
-			case MEMREAD:{CPU_DEBUGOUT("memrd");
-				push(cpu,readMemory(cpu,cpu->regadr));
-				//push(cpu,cpu->memory[(cpu->regadr)]);
-			}break;
-
-			// 8033  mem read and inc addr
-			/*
-			case MEMREADINC:{CPU_DEBUGOUT("MEMREADINC");
-				push(cpu,cpu->memory[(cpu->regadr++)]);
-			}break;
-			*/
-
-			// 8037  pop address
-			case POPADR:{ CPU_DEBUGOUT("popadr");
-				cpu->regadr=pop(cpu);
-			}break;
-
-			// this funktion needs 2 data stack elements
-			case EXTERNAL_C:{ CPU_DEBUGOUT("external c");
-				cpuExternalCall(cpu);
-			}break;
-			default: SYSTEMOUT("cpu cmd error");
-		}
-		cpu->regpc+=2; // regpc addresses bytes
-
-	}
-}
 
 /**************************************************************************
 
@@ -1210,22 +692,22 @@ void executeVm(Cpu_t *cpu, Command_t command)
 #define FORTH_VARIABLE 0xF10C // define a varible, address taken from RAMHEAP
 #define FORTH_ALLOT 0xF10D // increase the RamHeap
 #define FORTH_STRING 0xF10E // s" in forth ( set a string in code memory )
+#define FORTH_FOR	0xF10F
+#define FORTH_NEXT	0xF110
+#define FORTH_WHILE	0xF111
+#define FORTH_REPEAT 0xF112
+#define FORTH_IMMEDIATE 0xF113
+
 // the label stack is only used by the compiler for
 // nested loops. e.g. if-else-then, begin-until
 #define LABELSTACKSIZE 64
 
-void compile()
+void compile(Index_t compileIndex)
 {
-	Index_t id,compileIndex;
+	Index_t id;
 
 	uint16_t labelStackPointer=0; // label stack pointer. Use for conditional loops.
 	Index_t labelStack[LABELSTACKSIZE];
-
-    SYSTEMOUT_("COMPILE ");
-    getWordFromStreamWithOutComments();
-    SYSTEMOUT_(WordBuffer);
-    CurrentIndex=findEmptyDirEntryIndex();
-    compileIndex=setEntryName(WordBuffer);
 
     uint8_t exitFlag=false;
     do{
@@ -1298,18 +780,7 @@ void compile()
             		uint16_t value=WordBuffer[0];
             		compileIndex= appendCode(compileIndex,(Index_t) value);
             	}break;
-            	// forth word: ;
-            	case COMPILESTOP:
-				{
-	            	if(labelStackPointer==0)
-	            	{
-	            		compileIndex= appendCode(compileIndex, RTS|COMMANDGROUP2); // lastEntry=return command of cpu
-	            		nextEntry(compileIndex);
-	            		SYSTEMOUT_(" ");
-	            	}else SYSTEMOUT(" error: conditional not closed");
-	                exitFlag=true;
 
-				}break;
 				// forth word: if
 				case FORTH_IF: // tbd: stack for nested if's
 				{
@@ -1352,6 +823,20 @@ void compile()
 					//SYSTEMOUT("_UNTIL_");
 					compileIndex= appendCode(compileIndex,(Index_t) JMPZ |labelStack[--labelStackPointer]|COMMANDGROUP2);
 				}break;
+				case FORTH_WHILE:
+				{
+					// push current addres to stack
+					labelStack[labelStackPointer++]=compileIndex;
+					compileIndex= appendCode(compileIndex,(Index_t) JMPZ |COMMANDGROUP2);
+				}break;
+				case FORTH_REPEAT:
+				{
+					//SYSTEMOUT("_REPEAT_");
+					// set "while" jmpz address to this location+2 ( compileIndex )
+					appendCode(labelStack[--labelStackPointer],JMPZ | (compileIndex+2));
+					// jump to the "begin" statement
+					compileIndex= appendCode(compileIndex,(Index_t) JMP |labelStack[--labelStackPointer]|COMMANDGROUP2);
+				}break;
 				// forth word: 0do ( this is an abbreviation of 0 do )
 				case FORTH_0DO:
 				{
@@ -1379,6 +864,29 @@ void compile()
 					// drop
 					compileIndex= appendCode(compileIndex,(Index_t) DROP | COMMANDGROUP2);
 				}break;
+				case FORTH_FOR:
+				{
+					labelStack[labelStackPointer++]=compileIndex;
+					// store loop count on rsp
+					compileIndex= appendCode(compileIndex,(Index_t) DSP2RSP | COMMANDGROUP2);
+				}break;
+				case FORTH_NEXT:
+				{
+					// pop rsp ( get loop count )
+					compileIndex= appendCode(compileIndex,(Index_t) RSP2DSP | COMMANDGROUP2);
+					// 1-
+					compileIndex= appendCode(compileIndex,(Index_t) MINUS1 | COMMANDGROUP2);
+					// dup
+					compileIndex= appendCode(compileIndex,(Index_t) DUP | COMMANDGROUP2);
+					// invert, ( invert ffff = 0 )
+					compileIndex= appendCode(compileIndex,(Index_t) _NOT |COMMANDGROUP2);
+					// 0=
+					compileIndex= appendCode(compileIndex,(Index_t) CMPZA |COMMANDGROUP2);
+					// JMPZ label
+					compileIndex= appendCode(compileIndex,(Index_t) JMPZ |labelStack[--labelStackPointer]|COMMANDGROUP2);
+					// drop
+					compileIndex= appendCode(compileIndex,(Index_t) DROP | COMMANDGROUP2);
+				}break;
 				// forth word: #d ( switch to dec base )
 				case BASEDEC: // set console input/output base
 				{
@@ -1394,6 +902,19 @@ void compile()
 				{
 	            	compileIndex= appendEntryCode(compileIndex, id);
 				}break;
+
+				// forth word: ;
+            	case COMPILESTOP:
+				{
+	            	if(labelStackPointer==0)
+	            	{
+	            		compileIndex= appendCode(compileIndex, RTS|COMMANDGROUP2); // lastEntry=return command of cpu
+	            		nextEntry(compileIndex);
+	            		SYSTEMOUT_(" ");
+	            	}else SYSTEMOUT(" error: conditional not closed");
+	                exitFlag=true;
+				}break;
+
             }
         }
     }
@@ -1603,8 +1124,12 @@ int main(void) {
 	addDirEntry("else",FORTH_ELSE);
 	addDirEntry("begin",FORTH_BEGIN);
 	addDirEntry("until",FORTH_UNTIL);
+	addDirEntry("while",FORTH_WHILE);
+	addDirEntry("repeat",FORTH_REPEAT);
 	addDirEntry("0do",FORTH_0DO);
 	addDirEntry("loop",FORTH_LOOP);
+	addDirEntry("for",FORTH_FOR);
+	addDirEntry("next",FORTH_NEXT);
 	addDirEntry("d#",BASEDEC);
 	addDirEntry("h#",BASEHEX);
 	addDirEntry("[char]",FORTH_CHAR);
@@ -1612,6 +1137,7 @@ int main(void) {
 	addDirEntry("variable",FORTH_VARIABLE);
 	addDirEntry("allot",FORTH_ALLOT);
 	addDirEntry("s\"",FORTH_STRING);
+	addDirEntry("immediate",FORTH_IMMEDIATE);
 
 	addDirEntry("endBuildInWords",5);
 
@@ -1654,7 +1180,13 @@ int main(void) {
 #endif
 			switch(getDirEntryPointer(id)->code)
 			{
-        		case FORTH_CHAR:
+        	case FORTH_IMMEDIATE:
+        	{
+        		CurrentIndex=findEmptyDirEntryIndex();
+        		appendCode(CurrentIndex++,0xAAAA);
+        		nextEntry(CurrentIndex);
+        	}break;
+			case FORTH_CHAR:
         		{
         			getWordFromStreamWithOutComments();
         			uint16_t value=WordBuffer[0];
@@ -1685,7 +1217,13 @@ int main(void) {
 					showDictionary();
 				}break;
 				case COMPILE: {
-                    compile();
+				    SYSTEMOUT_("COMPILE ");
+				    getWordFromStreamWithOutComments();
+				    SYSTEMOUT_(WordBuffer);
+				    CurrentIndex=findEmptyDirEntryIndex();
+				    Index_t compileIndex;
+				    compileIndex=setEntryName(WordBuffer);
+                    compile(compileIndex);
 				}break;
 				case INCLUDE: {
 					getWordFromStreamWithOutComments(); // get file name
@@ -1700,15 +1238,6 @@ int main(void) {
 				case FORTH_VARIABLE: {
 			  		getWordFromStreamWithOutComments();
 			  		addDirEntry(WordBuffer,RamHeap++); // store the free address of the RamHeap and increase the RamHeap
-
-					/*	Index_t compileIndex;
-				    getWordFromStreamWithOutComments();
-				    CurrentIndex=findEmptyDirEntryIndex();
-				    compileIndex=setEntryName(WordBuffer);
-	            	compileIndex= appendCode(compileIndex, RamHeap++); // store the free address of the RamHeap and increase the RamHeap
-	            	compileIndex= appendCode(compileIndex, RTS|COMMANDGROUP2); // lastEntry=return command of cpu
-	            	nextEntry(compileIndex);
-					 */
 				}break;
 				case FORTH_ALLOT: {
 			  		RamHeap+=pop(&cpu);
@@ -1829,7 +1358,7 @@ int main(void) {
 #endif
 					uint8_t n=1000; // max instruction until stop ( for debugging )
 
-					while((cpu.retsp!=RETSP_INITVAL)&(n>0)) // run until return stack is empty
+					while((cpu.retsp!=0)&(n>0)) // run until return stack is empty
 					{
 						command=Memory_u8[cpu.regpc+1]<<8;
 						command|=Memory_u8[cpu.regpc];

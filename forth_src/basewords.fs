@@ -12,7 +12,8 @@ rregs rpointer ! \ attention: on stand alone controllers, ad this to init
 
 \ : swap	( a b -- b a ) reg0 ! reg1 ! reg0 @ reg1 @ ;  
 : - ( x y -- x-y ) swap _aminusb ;
-: over	( a b - a b a ) reg0 ! dup reg0 @ swap ;
+\ : over	( a b - a b a ) reg0 ! dup reg0 @ swap ;
+: over	( a b - a b a ) >r dup r> swap ;
 : nip	( a b - b ) swap drop ;
 
 \ : 2dup	( a b -- a b a b ) over over ;

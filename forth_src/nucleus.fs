@@ -82,8 +82,8 @@
 : max       2dup > ?: ;
 
 : c+!       tuck c@ + swap c! ;
-
-: count     dup 1+ swap c@ ;
+\ COUNT converts a string array address to the address-length representation of a counted string.
+\ : count     dup 1+ swap c@ ;
 : /string   dup >r - swap r> + swap ;
 : aligned   1+ h# fffe and ;
 
