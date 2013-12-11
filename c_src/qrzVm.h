@@ -63,14 +63,14 @@ extern "C"
   // developed in collaboration with Ale and his FPGA implementation
   #define CONST         0x0000	// if the highest bit is not set, a constant is pushed on stack
   #define CMPZA	  	0x00 	// 8000  CMPZ  A = A == 0
-  #define PLUS1   	0x01 	// 8001  1+    A = A + 1
-  #define PLUS2   	0x02 	// 8002  2+    A = A + 2
-  #define CMPNZA	0x03 	// 8003  CMPNZ A = A != 0
-  #define MINUS1  	0x04 	// 8004  1-    A = A - 1
-  #define MINUS2  	0x05 	// 8005  2-    A = A - 2
+  #define PLUS1   	0x42 	// 8001  1+    A = A + 1
+  #define PLUS2   	0x82 	// 8002  2+    A = A + 2
+  #define CMPNZA	0x01 	// 8003  CMPNZ A = A != 0
+  #define MINUS1  	0x43 	// 8004  1-    A = A - 1
+  #define MINUS2  	0x83 	// 8005  2-    A = A - 2
   #define _NOT    	0x08 	// 8008  NOT   A =~ A
-  #define _SHL    	0x0B 	// 800B  SHL   A = A << 1
-  #define _ASR    	0x0C 	// 800C  ASR   A = A >> 1
+  #define _SHL    	0x0E 	// 800B  SHL   A = A << 1
+  #define _ASR    	0x0F 	// 800C  ASR   A = A >> 1
   #define APLUSB  	0x10 	// 8010  ADD A = A + B
   #define AMINUSB 	0x11 	// 8011  SUB A = A - B
   #define AANDB   	0x12 	// 8012  AND A = A & B
@@ -84,11 +84,12 @@ extern "C"
   #define DUP 		0x22 	// 8022  dup
   #define DROP 		0x23	// 8023  drop
   #define SWAP 		0x24	// 8024  swap
+  #define OVER		0x25	// 8025  over
   #define ROT 		0x26	// 8026  rot
   #define MEMWRITE 	0x30	// 8030  mem write
   #define MEMREAD 	0x32 	// 8032  mem read
   #define POPADR 	0x3D 	// 803D  pop address ( pop to addr register A )
-  #define RTS 		0x3E 	// 803E   rts
+  #define RTS 		0x3F 	// 803E   rts
   
   #define JMPZ 		0xA000 	// A/B000 jmpz
   #define CALL 		0xC000 	// C/D000 call
@@ -98,6 +99,15 @@ extern "C"
 
   #define COMMANDGROUP2 	0x8000
   #define COMMANDGROUP2MASK 	0xE000
+  #define COMMANDHWREG		0xE03F
+  #define COMMANDHWREAD     0x803E
+  #define COMMANDHWWRITE    0x803D
+  #define hwuart_txd        ((0x20	<<6)|COMMANDHWWRITE)
+  #define hwuart_txf        ((0x21	<<6)|COMMANDHWREAD)
+  #define hwuart_rxd	    ((0x22	<<6)|COMMANDHWREAD)
+  #define hwuart_rxf	    ((0x23	<<6)|COMMANDHWREAD)
+
+
   
 /***************************************************************************************
   Function Prototypes

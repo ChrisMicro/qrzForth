@@ -52,7 +52,7 @@ uint8_t Memory_bigEndian_u8[STSIZE]; // big endian memory for other processors t
 #define CODE_SEPARATED_FROM_DICTIONARY
 
 uint16_t RamHeap=RAMHEAPSTART;
-typedef uint16_t Index_t; // index into Forth Memory_u8
+//typedef uint16_t Index_t; // index into Forth Memory_u8
 Index_t CurrentIndex=DICTIONARYSTARTADDRESS; // start dictionary at address 2
 Index_t CodePointer=CODESTARTADDRESS;
 
@@ -654,7 +654,7 @@ void disassmbleWord(Index_t code)
 	CPU simulator ( or virtual machine )
 
 *************************************************************************/
-typedef Index_t Command_t;
+//typedef Index_t Command_t;
 
 
 
@@ -1095,12 +1095,18 @@ int main(void) {
 	addDirEntry("dup",		DUP				|COMMANDGROUP2);
 	addDirEntry("drop",		DROP			|COMMANDGROUP2);
 	addDirEntry("swap",		SWAP			|COMMANDGROUP2);
+	addDirEntry("over",		OVER			|COMMANDGROUP2);
 	addDirEntry("rot",		ROT				|COMMANDGROUP2);
 	addDirEntry("memwrite",	MEMWRITE		|COMMANDGROUP2);
 	//#define MEMWRITEINC 0x31 	// 8031  mem write and inc addr
 	addDirEntry("memread",	MEMREAD			|COMMANDGROUP2);
 	//#define MEMREADINC 	0x33 	// 8033  mem read and inc addr
 	addDirEntry("popadr",	POPADR			|COMMANDGROUP2);
+	addDirEntry("hwuart_txd",	(0x20	<<6)|COMMANDHWWRITE);
+	addDirEntry("hwuart_txf",	(0x21	<<6)|COMMANDHWREAD);
+	addDirEntry("hwuart_rxd",	(0x22	<<6)|COMMANDHWWRITE);
+	addDirEntry("hwuart_rxf",	(0x23	<<6)|COMMANDHWREAD);
+
 	addDirEntry("rts",		RTS				|COMMANDGROUP2);
 	addDirEntry("jmpz",		JMPZ			|COMMANDGROUP2);
 	addDirEntry("call",		CALL			|COMMANDGROUP2);
@@ -1139,7 +1145,7 @@ int main(void) {
 	addDirEntry("s\"",FORTH_STRING);
 	addDirEntry("immediate",FORTH_IMMEDIATE);
 
-	addDirEntry("endBuildInWords",5);
+	addDirEntry("endBuiltInWords",5);
 
 	showDictionary();
 

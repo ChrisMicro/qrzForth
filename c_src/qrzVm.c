@@ -128,7 +128,29 @@ void executeVm(Cpu_t *cpu, Command_t command)
 			cpu->regpc=command&~COMMANDGROUP2MASK; // use lower bits as destination address
 		}else cpu->regpc+=2;
 	}
-	else if((command & COMMANDGROUP2MASK )== COMMANDGROUP2 )
+	else if((command & COMMANDHWREG) == COMMANDHWREAD)
+	{
+
+		switch (command)
+		{
+			case hwuart_txf: {push(cpu,1);}break;
+			case hwuart_rxd: {push(cpu, SYSTEMGETCHAR());}break;
+			case hwuart_rxf: {push(cpu,1);}break;
+		}
+		cpu->regpc+=2;
+	}
+	else if((command & COMMANDHWREG) == COMMANDHWWRITE)
+		{
+
+			switch (command)
+			{
+				case hwuart_txd: {
+					SYSTEMOUTCHAR(pop(cpu));
+				} break;
+			}
+			cpu->regpc+=2;
+		}
+		else if((command & COMMANDGROUP2MASK )== COMMANDGROUP2 )
 	{
 		uint8_t cmd=command&~COMMANDGROUP2MASK;
 
@@ -246,9 +268,12 @@ void executeVm(Cpu_t *cpu, Command_t command)
 			}break;
 
 			// 8020  >r , push value to return stack
-			case DSP2RSP:{CPU_DEBUGOUT("dsp2rsp");
+			case DSP2RSP:
+			{
+				CPU_DEBUGOUT("dsp2rsp");
 				push2ReturnStack(cpu,pop(cpu));
-			}break;
+			}
+			break;
 
 			// 8021 r> , pop value from return stack an push on data stack
 			case RSP2DSP:{ CPU_DEBUGOUT("rsp2dsp");
@@ -269,6 +294,14 @@ void executeVm(Cpu_t *cpu, Command_t command)
 			case SWAP:{ CPU_DEBUGOUT("SWAP");
 				uint16_t x1=pop(cpu);
 				uint16_t x2=pop(cpu);
+				push(cpu,x1);
+				push(cpu,x2);
+			}break;
+			// 8025  over
+			case OVER:{ CPU_DEBUGOUT("OVER");
+				uint16_t x1=pop(cpu);
+				uint16_t x2=pop(cpu);
+				push(cpu,x2);
 				push(cpu,x1);
 				push(cpu,x2);
 			}break;
