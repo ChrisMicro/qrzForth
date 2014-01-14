@@ -97,18 +97,16 @@ extern "C"
   
   #define EXTERNAL_C	0x80	// call c function outside simulator
 
-  #define COMMANDGROUP2 	0x8000
-  #define COMMANDGROUP2MASK 	0xE000
-  #define COMMANDHWREG		0xE03F
+  #define COMMANDGROUP2 	 0x8000
+  #define COMMANDGROUP2MASK 0xE000
+  #define COMMANDHWREG		 0xE03F
   #define COMMANDHWREAD     0x803E
   #define COMMANDHWWRITE    0x803D
   #define hwuart_txd        ((0x20	<<6)|COMMANDHWWRITE)
   #define hwuart_txf        ((0x21	<<6)|COMMANDHWREAD)
-  #define hwuart_rxd	    ((0x22	<<6)|COMMANDHWREAD)
-  #define hwuart_rxf	    ((0x23	<<6)|COMMANDHWREAD)
+  #define hwuart_rxd	     ((0x22 <<6)|COMMANDHWREAD)
+  #define hwuart_rxf	     ((0x23	<<6)|COMMANDHWREAD)
 
-
-  
 /***************************************************************************************
   Function Prototypes
 ***************************************************************************************/

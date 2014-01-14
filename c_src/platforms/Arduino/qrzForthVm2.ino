@@ -5,8 +5,8 @@
  Version     :
  Copyright   : GPL lizense 3
                ( chris (at) roboterclub-freiburg.de )
- Description : qrzForth - FORTH interpreter in C, Ansi-style
- Date        : 5 November 2013
+ Description : Arduino VM starter file
+ Date        : 14 January 2014
  ============================================================================
  */
 /*
@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <avr/pgmspace.h> 
 #include "qrzVm.h"
+#include "platform.h"
 
 void setup() {                
   Serial.begin(9600);
@@ -52,20 +53,35 @@ void printSysMessage()
 
 void loop() 
 {
-  Serial.println("start qrz VM");
-  delay(1000);              // wait for a second
-  static uint8_t n=0;
+	//static uint8_t n=0;
 
-  Cpu_t * cpu = &Cpu; 
-  simulatorReset(cpu);
+	Serial.println("start qrz VM");
+	delay(1000); // wait for a second
 
-  while(true)
-  {      
-     uint16_t command=readMemory(cpu, cpu->regpc/2);
+	Cpu_t * cpu = &Cpu;
+	simulatorReset(cpu);
 
-     executeVm(&Cpu, command);
-     
-     printSysMessage();
-     
-  }
+	UartReceiveState.VmUartReceiveReadyFlag=true;
+	UartReceiveState.ArduinoKeyFlag=true;
+
+	while(true)
+	{
+	 uint16_t command=readMemory(cpu, cpu->regpc/2);
+
+	 executeVm(&Cpu, command);
+	 if(UartReceiveState.VmUartReceiveReadyFlag)
+	 {
+	   if(Serial.available()>0)
+	   {
+	     UartReceiveState.ArduinoKeyFlag=true;
+	     UartReceiveState.VmUartReceiveReadyFlag=false;
+	     UartReceiveState.ArduinoKeyValue= Serial.read();
+	   }
+	   else UartReceiveState.ArduinoKeyFlag=false;
+	 }
+
+	 printSysMessage();
+
+	}
 }
+

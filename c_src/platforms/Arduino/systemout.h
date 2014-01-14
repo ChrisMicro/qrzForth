@@ -15,17 +15,22 @@ extern "C"
 
 #ifndef __SYSTEMOUT__
   #define __SYSTEMOUT__
-
+  #include <string.h>
   // #define DEBUGCPU
 
   #define SYSMESSAGELENGTH 32 
-  char SysMessage[SYSMESSAGELENGTH]={0};
+
   // because it is not possible to access Serial.print from Arduino
   // outside the loop function, we copy the messages in a buffer
   // and write the buffer in the loop to the serial port
   #define SYSTEMOUT(text) { strcpy(SysMessage,text); }; 
   #define SYSTEMOUT_(text) { strcpy(SysMessage,text); };
   #define SYSTEMOUTHEX(text,value) { sprintf(SysMessage,"%s %04x ",text, value);};
+
+  #define SYSTEMOUTCHAR(value) { SysMessage[0]=value;SysMessage[1]=0;};
+  #define SYSTEMGETCHAR() getchar()
+  #define SYSTEMKEYPRESSED() ArduinoKeyPressed()
+  #define SYSTEMGETKEY() ArduinoGetKey()
   
   #ifdef DEBUGCPU
   	#define CPU_DEBUGOUT(text)           SYSTEMOUT(text)
