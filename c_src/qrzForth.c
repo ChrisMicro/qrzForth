@@ -989,7 +989,9 @@ void save_qrzCode_Avr()
     uint32_t k;
 
 	FILE *f;
-    f=fopen("qrzCode.h","w");
+	char filenameAndPath[]="../qrzVmBase/qrzCode.h";
+    //f=fopen("qrzCode.h","w");
+	f=fopen(filenameAndPath,"w");
     if(f==NULL)
     {
     	SYSTEMOUT("could not open forth.bin for to write");
@@ -1008,7 +1010,8 @@ void save_qrzCode_Avr()
     	fprintf(f,"\n\r};\n\r");
         fclose(f);
 
-        SYSTEMOUT("bin files saved");
+        SYSTEMOUT("bin files saved to ");
+        SYSTEMOUT(filenameAndPath);
     }
 }
 /**********************************************************************
@@ -1104,7 +1107,7 @@ int main(void) {
 	addDirEntry("popadr",	POPADR			|COMMANDGROUP2);
 	addDirEntry("hwuart_txd",	(0x20	<<6)|COMMANDHWWRITE);
 	addDirEntry("hwuart_txf",	(0x21	<<6)|COMMANDHWREAD);
-	addDirEntry("hwuart_rxd",	(0x22	<<6)|COMMANDHWWRITE);
+	addDirEntry("hwuart_rxd",	(0x22	<<6)|COMMANDHWREAD);
 	addDirEntry("hwuart_rxf",	(0x23	<<6)|COMMANDHWREAD);
 
 	addDirEntry("rts",		RTS				|COMMANDGROUP2);
@@ -1362,7 +1365,7 @@ int main(void) {
 					SYSTEMOUTHEX("\ninstr: ",getDirEntryPointer(id)->code);
 					showCpu(&cpu);
 #endif
-					uint8_t n=1000; // max instruction until stop ( for debugging )
+					uint8_t n=200; // max instruction until stop ( for debugging )
 
 					while((cpu.retsp!=0)&(n>0)) // run until return stack is empty
 					{

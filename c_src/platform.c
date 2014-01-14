@@ -17,50 +17,24 @@ uint16_t RamMemory[RAMSIZE];
 uint8_t Memory_u8[STSIZE];
 uint8_t Memory_bigEndian_u8[STSIZE]; // big endian memory for other processors than PC
 
-
 void writeMemory(Cpu_t *cpu,uint16_t wordAddress, uint16_t value)
 {
-	#ifdef ARDUINO_PLATFORM
-	  //SYSTEMOUTHEX("memwrite: ",byteAddress);
-	  if( wordAddress>=SCREENADDRESS) qrzPutChar(value&0xff);// serial print char
-	  else
-	  if( ( wordAddress>=RAMHEAPSTART ) && ( wordAddress<(RAMHEAPSTART+RAMSIZE) ) )
-	  {
-		RamMemory[wordAddress-RAMHEAPSTART]=value;
-	  } else SYSTEMOUTHEX("memwrite error: ",wordAddress);
-	  //if(wordAddress==SCREENADDRESS) showScreen(cpu);
-	#endif
-
-	#ifdef PC_PLATFORM
 	  uint16_t * p;
 	  p=(uint16_t * )Memory_u8;
 	  p[wordAddress]=value;
-		//cpu->memory[wordAddress]=value;
-		if(wordAddress==SCREENADDRESS) showScreen(cpu);
-	#endif
+	  if(wordAddress==SCREENADDRESS) showScreen(cpu);
 }
 
 uint16_t readMemory(Cpu_t *cpu, uint16_t wordAddress)
 {
-	//SYSTEMOUTHEX("memread: ",wordAddress);
 	uint16_t value=0;
 
-	#ifdef ARDUINO_PLATFORM
-	  if( wordAddress<RAMHEAPSTART ) value=pgm_read_word_near(programMemory+wordAddress);
-	  else  if( ( wordAddress>=RAMHEAPSTART ) && ( wordAddress<(RAMHEAPSTART+RAMSIZE) ) )
-	  {
-		value=RamMemory[wordAddress-RAMHEAPSTART];
-	  }else SYSTEMOUTHEX("memread error: ",wordAddress);
-	#endif
-
-	#ifdef PC_PLATFORM
-		//value= cpu->memory[wordAddress];
-		value=(uint16_t)Memory_u8[wordAddress];
-		//SYSTEMOUTHEX("memread : ",value);
-	#endif
+	value=(uint16_t)Memory_u8[wordAddress*2];
+	value+=(uint16_t)(Memory_u8[wordAddress*2+1]<<8);
 
 	return value;
 }
+
 // tbd: move display memory outside the cpu
 #define COLUMNS 		100
 #define ROWS			10
@@ -83,12 +57,7 @@ void showScreen(Cpu_t *cpu)
 	}
 	*/
 }
-#ifdef ARDUINO_PLATFORM
-	char * getSysMessage()
-	{
-	  return SysMessage;
-	}
-#endif
+
 
 void qrzPutChar(char c)
 {
@@ -118,8 +87,7 @@ void cpuExternalCall(Cpu_t *cpu)
 {
 	int32_t command=pop(cpu);
 	uint16_t value;
-	//SYSTEMOUTHEX("command",command);
-	//SYSTEMOUTHEX("value",value);
+
 	switch(command)
 	{
 		case EXTERNAL_C_GETMSTIME:
@@ -154,6 +122,6 @@ void cpuExternalCall(Cpu_t *cpu)
 			value=pop(cpu);
 			Base=value;
 		}break;
-		default: SYSTEMOUT("external command not found");
+		default: SYSTEMOUT("external command not found");break;
 	}
 }
