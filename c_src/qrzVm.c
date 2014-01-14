@@ -133,11 +133,11 @@ void executeVm(Cpu_t *cpu, Command_t command)
 	{
 		switch (command)
 		{
-			case hwuart_txf: {push(cpu,1);}break;
+          case hwuart_txf: {push(cpu,1);}break;
 
-			case hwuart_rxf: {push(cpu, (uint8_t) SYSTEMKEYPRESSED());}break;
-            case hwuart_rxd: {push(cpu, (int8_t ) SYSTEMGETKEY());}break;
-            default: SYSTEMOUTHEX("error - COMMANDHWREAD:",command);
+          case hwuart_rxf: {push(cpu, (uint8_t) SYSTEMKEYPRESSED());}break;
+          case hwuart_rxd: {push(cpu, (int8_t ) SYSTEMGETKEY());}break;
+          default: SYSTEMOUTHEX("error - COMMANDHWREAD:",command);
 		}
 		cpu->regpc+=2;
 	}
@@ -146,14 +146,14 @@ void executeVm(Cpu_t *cpu, Command_t command)
 
 			switch (command)
 			{
-			    // 803D  pop address
-                case (POPADR+COMMANDGROUP2):{ CPU_DEBUGOUT("popadr");
-                    cpu->regadr=pop(cpu);
-                }break;
-				case hwuart_txd: {
-					SYSTEMOUTCHAR(pop(cpu));
-				} break;
-	            default: SYSTEMOUTHEX("error - COMMANDHWWRITE:",command);
+              // 803D  pop address
+              case (POPADR+COMMANDGROUP2):{ CPU_DEBUGOUT("popadr");
+                  cpu->regadr=pop(cpu);
+              }break;
+              case hwuart_txd: {
+                  SYSTEMOUTCHAR(pop(cpu));
+              } break;
+              default: SYSTEMOUTHEX("error - COMMANDHWWRITE:",command);
 			}
 			cpu->regpc+=2;
 		}
