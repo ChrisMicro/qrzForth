@@ -464,6 +464,7 @@ uint8_t isDigitOfBase(char chr)
 uint8_t isnumeric(char *str)
 {
 	if(*str=='-') str++; // skip "minus", it can be a negative number
+	if(*str==0) return false; // if end of string reached
 	while(*str)
 	{
 		if(!isDigitOfBase(*str))
@@ -664,17 +665,18 @@ void disassmbleWord(Index_t code)
 
 *************************************************************************/
 // definition for words outside FORTH
-#define BYE         0xF001
-#define WORDS       0xF002
-#define COMPILE     0xF003 // :
-#define SEE			0xF004 // show word contents
-#define DEBUGSIM	0xF005 // y
-#define POINT		0xF007 // emit top stack ( . )
-#define SAVEBIN		0xF008 // save memory as binary file
-#define MAKEMAIN	0xF009 // store jmp to main at location 0 in memory
-#define INCLUDE		0xF00A // load and compile forth file
-#define DUMPSTACK	0xF00B // in forth .s
-#define DEBUGWORD	0xF00C // debug word
+#define BYE            0xF001
+#define WORDS          0xF002
+#define COMPILE        0xF003 // :
+#define SEE	            0xF004 // show word contents
+#define DEBUGSIM       0xF005 // y
+#define POINT          0xF007 // emit top stack ( . )
+#define SAVEBIN	        0xF008 // save memory as binary file
+#define MAKEMAIN       0xF009 // store jmp to main at location 0 in memory
+#define INCLUDE	        0xF00A // load and compile forth file
+#define DUMPSTACK      0xF00B // in forth .s
+#define DEBUGWORD	    0xF00C // debug word
+#define RESTART        0xF00D // debug word
 
 // immediate words
 #define COMPILESTOP 0xF100 // ;
@@ -739,6 +741,8 @@ void compile(Index_t compileIndex)
 
             switch(forthwordCode)
             {
+
+
             	// forth string start word: s"
             	case FORTH_STRING:{ // make a string in code memory
 					// the new label is the address of the jump
@@ -1054,357 +1058,409 @@ void dumpStack(Cpu_t *cpu)
 	uint16_t sp;
 	for(sp=0; sp<cpu->datasp;sp++)SYSTEMOUTHEX(" ",cpu->dataStack[sp]);
 }
+
+uint8_t forth()
+{
+  DirEntry_t *de;
+  uint16_t k;
+  uint8_t debugWord=false;
+  uint32_t instructionCounter=0;
+  uint8_t restartFlag=false;
+
+  Cpu_t cpu;
+  simulatorReset(&cpu);
+
+  addDirEntry("none",0);
+  // CPU words
+  addDirEntry("0=",       CMPZA           |COMMANDGROUP2);
+  addDirEntry("1+",       PLUS1           |COMMANDGROUP2);
+  addDirEntry("2+",       PLUS2           |COMMANDGROUP2);
+  addDirEntry("0<>",      CMPNZA          |COMMANDGROUP2);
+  addDirEntry("1-",       MINUS1          |COMMANDGROUP2);
+  addDirEntry("2-",       MINUS2          |COMMANDGROUP2);
+  addDirEntry("invert",   _NOT            |COMMANDGROUP2);
+  addDirEntry("_shl",     _SHL            |COMMANDGROUP2);
+  addDirEntry("_asr",     _ASR            |COMMANDGROUP2);
+  addDirEntry("+",        APLUSB          |COMMANDGROUP2);
+  // tbd: rework this _aminusb cpu instruction, it's the wrong order for forth
+  addDirEntry("_aminusb",     AMINUSB         |COMMANDGROUP2);
+  addDirEntry("and",      AANDB           |COMMANDGROUP2);
+  addDirEntry("or",       AORB            |COMMANDGROUP2);
+  addDirEntry("xor",      AXORB           |COMMANDGROUP2);
+  addDirEntry("=",        AEQUALB         |COMMANDGROUP2);
+  addDirEntry("<>",       ANOTEQUALB      |COMMANDGROUP2);
+  addDirEntry(">",        AGREATERB       |COMMANDGROUP2);
+  addDirEntry(">r",       DSP2RSP         |COMMANDGROUP2);
+  addDirEntry("r>",       RSP2DSP         |COMMANDGROUP2);
+  addDirEntry("dup",      DUP             |COMMANDGROUP2);
+  addDirEntry("drop",     DROP            |COMMANDGROUP2);
+  addDirEntry("swap",     SWAP            |COMMANDGROUP2);
+  addDirEntry("over",     OVER            |COMMANDGROUP2);
+  addDirEntry("rot",      ROT             |COMMANDGROUP2);
+  addDirEntry("memwrite", MEMWRITE        |COMMANDGROUP2);
+  //#define MEMWRITEINC 0x31  // 8031  mem write and inc addr
+  addDirEntry("memread",  MEMREAD         |COMMANDGROUP2);
+  //#define MEMREADINC    0x33    // 8033  mem read and inc addr
+  addDirEntry("popadr",   POPADR          |COMMANDGROUP2);
+  addDirEntry("hwuart_txd",   (0x20   <<6)|COMMANDHWWRITE);
+  addDirEntry("hwuart_txf",   (0x21   <<6)|COMMANDHWREAD);
+  addDirEntry("hwuart_rxd",   (0x22   <<6)|COMMANDHWREAD);
+  addDirEntry("hwuart_rxf",   (0x23   <<6)|COMMANDHWREAD);
+
+  addDirEntry("rts",      RTS             |COMMANDGROUP2);
+  addDirEntry("jmpz",     JMPZ            |COMMANDGROUP2);
+  addDirEntry("call",     CALL            |COMMANDGROUP2);
+  addDirEntry("external", EXTERNAL_C      |COMMANDGROUP2);
+
+  // chForth local system words
+  addDirEntry("bye",BYE);     // exit forth
+  addDirEntry("words",WORDS); // list words
+  addDirEntry(":",COMPILE);   // compile
+  addDirEntry("see",SEE);     // see word definition
+  addDirEntry("y",DEBUGSIM);  // debug simulator
+  addDirEntry("save",SAVEBIN);    // save memory as binary file
+  addDirEntry("main",MAKEMAIN);   //store jmp to main at location 0 in memory
+  addDirEntry("include",INCLUDE); // load and compile new forth ( *.fs ) file
+  addDirEntry(".s",DUMPSTACK); // preliminary because the cpu can not read  the stack pointer
+  addDirEntry("debug",DEBUGWORD); // debug FORTH word
+  addDirEntry("restart",RESTART); // debug FORTH word
+  // immediate words
+  addDirEntry(";",COMPILESTOP);
+  addDirEntry("if",FORTH_IF);
+  addDirEntry("then",FORTH_THEN);
+  addDirEntry("else",FORTH_ELSE);
+  addDirEntry("begin",FORTH_BEGIN);
+  addDirEntry("until",FORTH_UNTIL);
+  addDirEntry("while",FORTH_WHILE);
+  addDirEntry("repeat",FORTH_REPEAT);
+  addDirEntry("0do",FORTH_0DO);
+  addDirEntry("loop",FORTH_LOOP);
+  addDirEntry("for",FORTH_FOR);
+  addDirEntry("next",FORTH_NEXT);
+  addDirEntry("d#",BASEDEC);
+  addDirEntry("h#",BASEHEX);
+  addDirEntry("[char]",FORTH_CHAR);
+  addDirEntry("constant",FORTH_CONSTANT);
+  addDirEntry("variable",FORTH_VARIABLE);
+  addDirEntry("allot",FORTH_ALLOT);
+  addDirEntry("s\"",FORTH_STRING);
+  addDirEntry("immediate",FORTH_IMMEDIATE);
+
+  addDirEntry("endBuiltInWords",5);
+
+  showDictionary();
+
+  Index_t id;
+
+  uint8_t exitFlag=false;
+  while(!exitFlag)
+  {
+      //getWordFromStream();
+      getWordFromStreamWithOutComments();
+
+      id=searchWord(WordBuffer);
+
+      if(id==0) // 0 if word not found. It may be a number
+      {
+          if(isnumeric(WordBuffer)) // check if it is a number
+          {
+              // the number can be in decimal or hexadecimal format
+              int16_t number = strtol(WordBuffer, NULL, Base);
+              if(number<0) // unfortunately the cpu can only push 15bit constants
+              {
+                  // we use a trick to push 16 bit
+                  number=~number;
+                  executeVm(&cpu,number&0x7fff); // push constant on stack
+                  executeVm(&cpu,_NOT | COMMANDGROUP2); // invert
+              }else executeVm(&cpu,number&0x7fff); // push constant on stack
+          }
+          else
+              {
+                  SYSTEMOUT_ ("don't know ");
+                  SYSTEMOUT (WordBuffer);
+              }
+      }
+      else
+      {
+#ifdef DEBUG
+          showDirEntry(id);
+#endif
+          switch(getDirEntryPointer(id)->code)
+          {
+              case RESTART:
+              {
+                restartFlag=true;
+                exitFlag=true;
+              }break;
+
+              case FORTH_IMMEDIATE:
+              {
+                  CurrentIndex=findEmptyDirEntryIndex();
+                  appendCode(CurrentIndex++,0xAAAA);
+                  nextEntry(CurrentIndex);
+              }break;
+
+              case FORTH_CHAR:
+              {
+                  getWordFromStreamWithOutComments();
+                  uint16_t value=WordBuffer[0];
+                  executeVm(&cpu,value); // push char value on stack
+              }break;
+
+              case DEBUGWORD:
+              {
+                  debugWord=true;
+              }break;
+
+              case DUMPSTACK:
+              {
+                  dumpStack(&cpu);
+              }break;
+
+              case BASEDEC:
+              {
+                  Base=10;
+              }break;
+
+              case BASEHEX:
+              {
+                  Base=16;
+              }break;
+
+              case BYE: { // leave forth interpreter
+                  exitFlag=true;
+                  restartFlag=false;
+              }break;
+
+              case WORDS: {
+                  SYSTEMOUT("words");
+                  showDictionary();
+              }break;
+
+              case COMPILE: {
+                  SYSTEMOUT_("COMPILE ");
+                  getWordFromStreamWithOutComments();
+                  SYSTEMOUT_(WordBuffer);
+                  CurrentIndex=findEmptyDirEntryIndex();
+                  Index_t compileIndex;
+                  compileIndex=setEntryName(WordBuffer);
+                  compile(compileIndex);
+              }break;
+
+              case INCLUDE: {
+                  getWordFromStreamWithOutComments(); // get file name
+                  InputStreamState=OPENFILE; // switch to file input
+              }break;
+
+              case FORTH_CONSTANT: {
+                  getWordFromStreamWithOutComments();
+                  uint16_t k=pop(&cpu);
+                  if((k&0x8000)!=0) SYSTEMOUT("Warning: negative constants will be interpreted as VM commands in this FORTH version");
+                  addDirEntry(WordBuffer,k);
+              }break;
+
+              case FORTH_VARIABLE: {
+                  getWordFromStreamWithOutComments();
+                  addDirEntry(WordBuffer,RamHeap++); // store the free address of the RamHeap and increase the RamHeap
+              }break;
+
+              case FORTH_ALLOT: {
+                  RamHeap+=pop(&cpu);
+              }break;
+
+              // set reset vector to forth word given
+              // to set the reset vector is mandatory for code running
+              // on stand alone VMs
+              case MAKEMAIN: {
+                      getWordFromStreamWithOutComments();
+                      id=searchWord(WordBuffer);
+                      if(id!=0) // if word found
+                      {
+                          de=getDirEntryPointer(id);
+                          id=de->code;
+                          // id|=JMP; // JMP to main
+                          // the first location in memory is the reset address
+                          id&=~COMMANDGROUP2MASK; // remove call from address
+                          SYSTEMOUTCR;
+                          SYSTEMOUTHEX("reset vector set to address: ",id);
+                          SYSTEMOUTCR;
+                          SYSTEMOUT_("ok>");
+                          id|=JMP; // replace by a jmp
+                          Memory_u8[0]=id&0xff;
+                          Memory_u8[1]=id>>8;
+                      }
+              }break;
+
+              // SEE: forth disassembler command
+              case SEE: {
+                  getWordFromStreamWithOutComments();
+                  id=searchWord(WordBuffer);
+
+                  SYSTEMOUTHEX("word id: ",id);
+                  SYSTEMOUT("");
+                  if(id==0)break;
+                  de=getDirEntryPointer(id);
+                  for(k=id;k<de->indexOfNextEntry;k++) SYSTEMOUTHEX2(" ",Memory_u8[k]);
+                  SYSTEMOUT("\n");
+                  Index_t codestart;
+                  if(((de->code)&COMMANDGROUP2MASK)==CALL)
+                  {
+                      codestart=(de->code)&~CALL;
+                  }
+                  else codestart=de->code;
+                  for(k=id;k<de->indexOfNextEntry;)
+                  {
+                      //if(k==codestart){SYSTEMOUT("===== code =======");}
+                      SYSTEMOUTHEX("adr:",k);
+                      uint16_t cc=(uint16_t) (Memory_u8[k+1]<<8)+Memory_u8[k];
+                      SYSTEMOUTHEX(" ",cc);
+                      if(k==id){SYSTEMOUT_(" <= index of next entry");}
+                      if(k==id+2)disassmbleWord(cc);
+                      if(k>(id+3))
+                      {
+                          if((Memory_u8[k]==0)||( (Memory_u8[k+1]<<8)==0) )
+                          {
+                              k=de->indexOfNextEntry; // end of string, stop output
+                          }
+                          else
+                          {
+                              SYSTEMOUTCHAR(' ');
+                              SYSTEMOUTCHAR(Memory_u8[k]);
+                              SYSTEMOUTCHAR(Memory_u8[k+1]);
+                          }
+                      }
+                      SYSTEMOUT("");
+                      k+=2;
+                  }
+                  // disassemble code
+                  if(((de->code)&COMMANDGROUP2MASK)==CALL)
+                  {
+                      SYSTEMOUT("===== code =======");
+                      codestart=(de->code)&~CALL;
+                      k=codestart;
+                      uint8_t cnt=0;
+                      uint16_t cc;
+                      do
+                      {
+                          cc=(uint16_t) (Memory_u8[k+1]<<8)+Memory_u8[k];
+                          SYSTEMOUTHEX("adr:",k);
+                          SYSTEMOUTHEX(" ",cc);
+                          k+=2;
+                          disassmbleWord(cc);
+                          SYSTEMOUT("");
+                          cnt++;
+                      }while((cc!=(RTS|COMMANDGROUP2))&&(cnt<100));
+                  }
+              }break;
+
+              case SAVEBIN: // save binary file
+              {
+                  makeBigEndian();
+                  saveBinFile();
+                  save_qrzCode_Avr();
+              }break;
+
+              case DEBUGSIM: // 'y'
+              {
+                  showCpu(&cpu);
+                  SYSTEMOUTDEC("instructions needed: ",instructionCounter);
+                  SYSTEMOUT("");
+              }break;
+
+              // if no build in command is detected
+              // search for the command in the dictionary and execute it
+              default:
+              {
+                  Command_t command;
+                  uint16_t callCount=0;
+
+                  command=getDirEntryPointer(id)->code;
+                  //SYSTEMOUT_("         ");
+                  instructionCounter=1;
+                  executeVm(&cpu,command);
+                  if(debugWord)
+                  {
+                      disassmbleWord(command);
+                      if((command&COMMANDGROUP2MASK)==CALL) callCount++;
+                      SYSTEMOUT_("\t\t stack: ");
+                      dumpStack(&cpu);
+                      SYSTEMOUTCR;
+                  }
+#ifdef DEBUG
+                  SYSTEMOUTHEX("\ninstr: ",getDirEntryPointer(id)->code);
+                  showCpu(&cpu);
+#endif
+                  uint8_t n=200; // max instruction until stop ( for debugging )
+
+                  while((cpu.retsp!=0)&(n>0)) // run until return stack is empty
+                  {
+                      command=Memory_u8[cpu.regpc+1]<<8;
+                      command|=Memory_u8[cpu.regpc];
+                      //SYSTEMOUTHEX("hex",command);
+                      instructionCounter++;
+                      if(debugWord&&(callCount<2))
+                      {
+                          {SYSTEMOUTHEX("adr:",cpu.regpc);}
+                          executeVm(&cpu,command);
+                          disassmbleWord(command);
+                          SYSTEMOUT_("\t\t stack: ");
+                           dumpStack(&cpu);
+                          SYSTEMOUTCR;
+                          /*
+                          if(instructionCounter++==20)
+                          {
+                              instructionCounter=0;
+                              SYSTEMOUT("press space ==> next ");
+                              GETCHAR;
+                          }*/
+                      }else executeVm(&cpu,command);
+                      if((command&COMMANDGROUP2MASK)==CALL) callCount++;
+                      if(command==(COMMANDGROUP2|RTS)) --callCount;
+
+#ifdef DEBUG
+                      SYSTEMOUTHEX("\ninstr ",command);
+                      showCpu(&cpu);
+#endif
+                      //n--; // enable this to limit number of instructions ( for debugging )
+                  }
+                  debugWord=false;
+              }break;
+          }
+      }           if(InputStreamState==GETKEY) SYSTEMOUT("ok>");
+  }
+
+  return restartFlag;
+}
 /**************************************************************************
 
 	main
 
 *************************************************************************/
-int main(void) {
+int main(void)
+{
+  uint8_t restart=true;
 
-	DirEntry_t *de;
-	uint16_t k;
-	uint8_t debugWord=false;
-	uint32_t instructionCounter=0;
+  while(restart)
+  {
+    // initialize global varialbles
+    Base=10;
+    RamHeap=RAMHEAPSTART;
+    CurrentIndex=DICTIONARYSTARTADDRESS; // start dictionary at address 2
+    CodePointer=CODESTARTADDRESS;
+    uint32_t n;
+    for(n=0;n<STSIZE;n++)Memory_u8[STSIZE]=0;
 
-	strcpy(WordBuffer,"startup.fs"); // start up forth file will be loaded first
-	InputStreamState=OPENFILE; // load basic words
+    strcpy(WordBuffer,"startup.fs"); // start up forth file will be loaded first
+    InputStreamState=OPENFILE; // load basic words
 
-	SYSTEMOUT("!!!chForth!!!"); /* prints !!!Hello World!!! */
-	Cpu_t cpu;
-	simulatorReset(&cpu);
+    SYSTEMOUTCR;
+    SYSTEMOUT("!!!chForth!!!");
 
-	addDirEntry("none",0);
-	// CPU words
-	addDirEntry("0=",		CMPZA			|COMMANDGROUP2);
-	addDirEntry("1+",		PLUS1			|COMMANDGROUP2);
-	addDirEntry("2+",		PLUS2			|COMMANDGROUP2);
-	addDirEntry("0<>",		CMPNZA			|COMMANDGROUP2);
-	addDirEntry("1-",		MINUS1			|COMMANDGROUP2);
-	addDirEntry("2-",		MINUS2			|COMMANDGROUP2);
-	addDirEntry("invert",	_NOT			|COMMANDGROUP2);
-	addDirEntry("_shl",		_SHL			|COMMANDGROUP2);
-	addDirEntry("_asr",		_ASR			|COMMANDGROUP2);
-	addDirEntry("+",		APLUSB			|COMMANDGROUP2);
-	// tbd: rework this _aminusb cpu instruction, it's the wrong order for forth
-	addDirEntry("_aminusb",		AMINUSB			|COMMANDGROUP2);
-	addDirEntry("and",		AANDB			|COMMANDGROUP2);
-	addDirEntry("or",		AORB			|COMMANDGROUP2);
-	addDirEntry("xor",		AXORB			|COMMANDGROUP2);
-	addDirEntry("=",		AEQUALB			|COMMANDGROUP2);
-	addDirEntry("<>",		ANOTEQUALB		|COMMANDGROUP2);
-	addDirEntry(">",		AGREATERB		|COMMANDGROUP2);
-	addDirEntry(">r",		DSP2RSP			|COMMANDGROUP2);
-	addDirEntry("r>",		RSP2DSP			|COMMANDGROUP2);
-	addDirEntry("dup",		DUP				|COMMANDGROUP2);
-	addDirEntry("drop",		DROP			|COMMANDGROUP2);
-	addDirEntry("swap",		SWAP			|COMMANDGROUP2);
-	addDirEntry("over",		OVER			|COMMANDGROUP2);
-	addDirEntry("rot",		ROT				|COMMANDGROUP2);
-	addDirEntry("memwrite",	MEMWRITE		|COMMANDGROUP2);
-	//#define MEMWRITEINC 0x31 	// 8031  mem write and inc addr
-	addDirEntry("memread",	MEMREAD			|COMMANDGROUP2);
-	//#define MEMREADINC 	0x33 	// 8033  mem read and inc addr
-	addDirEntry("popadr",	POPADR			|COMMANDGROUP2);
-	addDirEntry("hwuart_txd",	(0x20	<<6)|COMMANDHWWRITE);
-	addDirEntry("hwuart_txf",	(0x21	<<6)|COMMANDHWREAD);
-	addDirEntry("hwuart_rxd",	(0x22	<<6)|COMMANDHWREAD);
-	addDirEntry("hwuart_rxf",	(0x23	<<6)|COMMANDHWREAD);
+    restart=forth();
 
-	addDirEntry("rts",		RTS				|COMMANDGROUP2);
-	addDirEntry("jmpz",		JMPZ			|COMMANDGROUP2);
-	addDirEntry("call",		CALL			|COMMANDGROUP2);
-	addDirEntry("external",	EXTERNAL_C		|COMMANDGROUP2);
+  }
 
-	// chForth local system words
-	addDirEntry("bye",BYE);		// exit forth
-	addDirEntry("words",WORDS); // list words
-	addDirEntry(":",COMPILE); 	// compile
-	addDirEntry("see",SEE); 	// see word definition
-	addDirEntry("y",DEBUGSIM); 	// debug simulator
-	addDirEntry("save",SAVEBIN); 	// save memory as binary file
-	addDirEntry("main",MAKEMAIN); 	//store jmp to main at location 0 in memory
-	addDirEntry("include",INCLUDE); // load and compile new forth ( *.fs ) file
-	addDirEntry(".s",DUMPSTACK); // preliminary because the cpu can not read  the stack pointer
-	addDirEntry("debug",DEBUGWORD); // debug FORTH word
-	// immediate words
-	addDirEntry(";",COMPILESTOP);
-	addDirEntry("if",FORTH_IF);
-	addDirEntry("then",FORTH_THEN);
-	addDirEntry("else",FORTH_ELSE);
-	addDirEntry("begin",FORTH_BEGIN);
-	addDirEntry("until",FORTH_UNTIL);
-	addDirEntry("while",FORTH_WHILE);
-	addDirEntry("repeat",FORTH_REPEAT);
-	addDirEntry("0do",FORTH_0DO);
-	addDirEntry("loop",FORTH_LOOP);
-	addDirEntry("for",FORTH_FOR);
-	addDirEntry("next",FORTH_NEXT);
-	addDirEntry("d#",BASEDEC);
-	addDirEntry("h#",BASEHEX);
-	addDirEntry("[char]",FORTH_CHAR);
-	addDirEntry("constant",FORTH_CONSTANT);
-	addDirEntry("variable",FORTH_VARIABLE);
-	addDirEntry("allot",FORTH_ALLOT);
-	addDirEntry("s\"",FORTH_STRING);
-	addDirEntry("immediate",FORTH_IMMEDIATE);
-
-	addDirEntry("endBuiltInWords",5);
-
-	showDictionary();
-
-	Index_t id;
-
-	uint8_t exitFlag=false;
-	while(!exitFlag)
-	{
-		//getWordFromStream();
-		getWordFromStreamWithOutComments();
-
-		id=searchWord(WordBuffer);
-
-		if(id==0) // 0 if word not found. It may be a number
-		{
-			if(isnumeric(WordBuffer)) // check if it is a number
-			{
-				// the number can be in decimal or hexadecimal format
-				int16_t number = strtol(WordBuffer, NULL, Base);
-				if(number<0) // unfortunately the cpu can only push 15bit constants
-				{
-					// we use a trick to push 16 bit
-					number=~number;
-					executeVm(&cpu,number&0x7fff); // push constant on stack
-					executeVm(&cpu,_NOT | COMMANDGROUP2); // invert
-				}else executeVm(&cpu,number&0x7fff); // push constant on stack
-			}
-			else
-				{
-					SYSTEMOUT_ ("don't know ");
-					SYSTEMOUT (WordBuffer);
-				}
-		}
-		else
-		{
-#ifdef DEBUG
-			showDirEntry(id);
-#endif
-			switch(getDirEntryPointer(id)->code)
-			{
-        	case FORTH_IMMEDIATE:
-        	{
-        		CurrentIndex=findEmptyDirEntryIndex();
-        		appendCode(CurrentIndex++,0xAAAA);
-        		nextEntry(CurrentIndex);
-        	}break;
-			case FORTH_CHAR:
-        		{
-        			getWordFromStreamWithOutComments();
-        			uint16_t value=WordBuffer[0];
-        			executeVm(&cpu,value); // push char value on stack
-        		}break;
-        		case DEBUGWORD:
-        		{
-        			debugWord=true;
-        		}break;
-        		case DUMPSTACK:
-				{
-					dumpStack(&cpu);
-				}break;
-        		case BASEDEC:
-				{
-					Base=10;
-				}break;
-				case BASEHEX:
-				{
-					Base=16;
-				}break;
-				case BYE: {
-					//SYSTEMOUT("good bye");
-					exitFlag=true;
-				}break;
-				case WORDS: {
-					SYSTEMOUT("words");
-					showDictionary();
-				}break;
-				case COMPILE: {
-				    SYSTEMOUT_("COMPILE ");
-				    getWordFromStreamWithOutComments();
-				    SYSTEMOUT_(WordBuffer);
-				    CurrentIndex=findEmptyDirEntryIndex();
-				    Index_t compileIndex;
-				    compileIndex=setEntryName(WordBuffer);
-                    compile(compileIndex);
-				}break;
-				case INCLUDE: {
-					getWordFromStreamWithOutComments(); // get file name
-					InputStreamState=OPENFILE; // switch to file input
-				}break;
-				case FORTH_CONSTANT: {
-			  		getWordFromStreamWithOutComments();
-			  		uint16_t k=pop(&cpu);
-			  		if((k&0x8000)!=0) SYSTEMOUT("Warning: negative constants will be interpreted as VM commands in this FORTH version");
-			  		addDirEntry(WordBuffer,k);
-				}break;
-				case FORTH_VARIABLE: {
-			  		getWordFromStreamWithOutComments();
-			  		addDirEntry(WordBuffer,RamHeap++); // store the free address of the RamHeap and increase the RamHeap
-				}break;
-				case FORTH_ALLOT: {
-			  		RamHeap+=pop(&cpu);
-				}break;
-
-				case MAKEMAIN: {
-				  		getWordFromStreamWithOutComments();
-				    	id=searchWord(WordBuffer);
-				        if(id!=0) // if word found
-				        {
-				        	de=getDirEntryPointer(id);
-				        	id=de->code;
-				        	// id|=JMP; // JMP to main
-				        	// the first location in memory is the reset address
-				        	id&=~COMMANDGROUP2MASK; // remove call from address
-				        	SYSTEMOUTCR;
-				        	SYSTEMOUTHEX("reset vector set to address: ",id);
-				        	SYSTEMOUTCR;
-				        	SYSTEMOUT_("ok>");
-				        	id|=JMP; // replace by a jmp
-				        	Memory_u8[0]=id&0xff;
-				        	Memory_u8[1]=id>>8;
-				        }
-				}break;
-
-				case SEE: {
-					getWordFromStreamWithOutComments();
-					id=searchWord(WordBuffer);
-
-					SYSTEMOUTHEX("word id: ",id);
-					SYSTEMOUT("");
-					if(id==0)break;
-					de=getDirEntryPointer(id);
-					for(k=id;k<de->indexOfNextEntry;k++) SYSTEMOUTHEX2(" ",Memory_u8[k]);
-					SYSTEMOUT("\n");
-					Index_t codestart;
-					if(((de->code)&COMMANDGROUP2MASK)==CALL)
-					{
-						codestart=(de->code)&~CALL;
-					}
-					else codestart=de->code;
-					for(k=id;k<de->indexOfNextEntry;)
-					{
-						//if(k==codestart){SYSTEMOUT("===== code =======");}
-						SYSTEMOUTHEX("adr:",k);
-						uint16_t cc=(uint16_t) (Memory_u8[k+1]<<8)+Memory_u8[k];
-						SYSTEMOUTHEX(" ",cc);
-						if(k==id){SYSTEMOUT_(" <= index of next entry");}
-						if(k==id+2)disassmbleWord(cc);
-						if(k>(id+3))
-						{
-							if((Memory_u8[k]==0)||( (Memory_u8[k+1]<<8)==0) )
-							{
-								k=de->indexOfNextEntry; // end of string, stop output
-							}
-							else
-							{
-								SYSTEMOUTCHAR(' ');
-								SYSTEMOUTCHAR(Memory_u8[k]);
-								SYSTEMOUTCHAR(Memory_u8[k+1]);
-							}
-						}
-						SYSTEMOUT("");
-						k+=2;
-					}
-					// disassemble code
-					if(((de->code)&COMMANDGROUP2MASK)==CALL)
-					{
-						SYSTEMOUT("===== code =======");
-						codestart=(de->code)&~CALL;
-						k=codestart;
-						uint8_t cnt=0;
-						uint16_t cc;
-						do
-						{
-							cc=(uint16_t) (Memory_u8[k+1]<<8)+Memory_u8[k];
-							SYSTEMOUTHEX("adr:",k);
-							SYSTEMOUTHEX(" ",cc);
-							k+=2;
-							disassmbleWord(cc);
-							SYSTEMOUT("");
-							cnt++;
-						}while((cc!=(RTS|COMMANDGROUP2))&&(cnt<100));
-					}
-				}break;
-				case SAVEBIN: // save binary file
-				{
-					makeBigEndian();
-					saveBinFile();
-					save_qrzCode_Avr();
-				}break;
-				case DEBUGSIM: // 'y'
-				{
-					showCpu(&cpu);
-					SYSTEMOUTDEC("instructions needed: ",instructionCounter);
-					SYSTEMOUT("");
-				}break;
-				default:
-				{
-					Command_t command;
-					uint16_t callCount=0;
-
-					command=getDirEntryPointer(id)->code;
-					//SYSTEMOUT_("         ");
-					instructionCounter=1;
-					executeVm(&cpu,command);
-					if(debugWord)
-					{
-						disassmbleWord(command);
-						if((command&COMMANDGROUP2MASK)==CALL) callCount++;
-						SYSTEMOUT_("\t\t stack: ");
-						dumpStack(&cpu);
-						SYSTEMOUTCR;
-					}
-#ifdef DEBUG
-					SYSTEMOUTHEX("\ninstr: ",getDirEntryPointer(id)->code);
-					showCpu(&cpu);
-#endif
-					uint8_t n=200; // max instruction until stop ( for debugging )
-
-					while((cpu.retsp!=0)&(n>0)) // run until return stack is empty
-					{
-						command=Memory_u8[cpu.regpc+1]<<8;
-						command|=Memory_u8[cpu.regpc];
-						//SYSTEMOUTHEX("hex",command);
-						instructionCounter++;
-						if(debugWord&&(callCount<2))
-						{
-							{SYSTEMOUTHEX("adr:",cpu.regpc);}
-							executeVm(&cpu,command);
-							disassmbleWord(command);
-							SYSTEMOUT_("\t\t stack: ");
-							 dumpStack(&cpu);
-							SYSTEMOUTCR;
-							/*
-							if(instructionCounter++==20)
-							{
-								instructionCounter=0;
-								SYSTEMOUT("press space ==> next ");
-								GETCHAR;
-							}*/
-						}else executeVm(&cpu,command);
-						if((command&COMMANDGROUP2MASK)==CALL) callCount++;
-						if(command==(COMMANDGROUP2|RTS)) --callCount;
-
-#ifdef DEBUG
-						SYSTEMOUTHEX("\ninstr ",command);
-						showCpu(&cpu);
-#endif
-						//n--; // enable this to limit number of instructions ( for debugging )
-					}
-					debugWord=false;
-				}break;
-			}
-		}			if(InputStreamState==GETKEY) SYSTEMOUT("ok>");
-	}
-
-	SYSTEMOUT("good bye");
-	return 0;
+  SYSTEMOUT("good bye");
+  return 0;
 }
 

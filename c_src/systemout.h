@@ -56,7 +56,7 @@ extern "C"
 		#define SYSTEMOUT(text) { puts(text);};
 		#define SYSTEMOUT_(text) { printf("%s",text);};
 		#define SYSTEMOUTCR {puts("");};
-		#define SYSTEMOUTHEX(text,value) { printf(text);printf("%04x ",value);};
+		#define SYSTEMOUTHEX(text,value) { printf("%s",text);printf("%04x ",value);};
 		#define SYSTEMOUTHEX2(text,value) { printf(text);printf("%02x ",value);};
 		#define SYSTEMOUTDEC(text,value) { printf(text);printf("%d ",value);};
 		#define SYSTEMOUTCHAR(value) { putchar(value);};
