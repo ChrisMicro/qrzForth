@@ -54,7 +54,7 @@ extern "C"
         #define SYSTEMKEYPRESSED() 1 // on a PC we can not ask for dynamic keys
         #define SYSTEMGETKEY() getchar()
 		#define SYSTEMOUT(text) { puts(text);};
-		#define SYSTEMOUT_(text) { printf(text);};
+		#define SYSTEMOUT_(text) { printf("%s",text);};
 		#define SYSTEMOUTCR {puts("");};
 		#define SYSTEMOUTHEX(text,value) { printf(text);printf("%04x ",value);};
 		#define SYSTEMOUTHEX2(text,value) { printf(text);printf("%02x ",value);};
